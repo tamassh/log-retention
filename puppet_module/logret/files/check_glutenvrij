@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Standard nagios exit codes
+STAT_OK=0
+STAT_WA=1
+STAT_CR=2
+STAT_UN=3
+
+glutenvrij_stat="/var/lock/subsys/retention.lock"
+
+if [ ! -f $glutenvrij_stat ];
+then
+	echo "OK - Glutenvrij status is clean"
+	exit $STAT_OK
+else
+	if [ ! -z "`find /var/lock/subsys/ -mmin +240 | grep retention.lock`" ]; then
+		echo "HOUSTON - 240+ min old lock file - `stat /var/lock/subsys/retention.lock | grep Modify | awk '{print $2,$3}' | cut -d\. -f1`"
+		exit $STAT_CR
+	fi
+fi
+
+echo "OK - In progress processing .."
+

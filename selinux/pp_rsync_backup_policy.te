@@ -1,0 +1,17 @@
+
+module pp_rsync_backup_policy 1.2;
+
+require {
+	type rsync_t;
+	type fusefs_t;
+	class file { rename setattr read create write getattr unlink open };
+	class dir { search getattr write add_name remove_name read open setattr };
+}
+
+#============= rsync_t ==============
+
+#!!!! This avc can be allowed using the boolean 'rsync_export_all_ro'
+allow rsync_t fusefs_t:file { read getattr open };
+allow rsync_t fusefs_t:file { write rename create unlink setattr };
+
+allow rsync_t fusefs_t:dir { search getattr write add_name remove_name read open setattr };

@@ -1,0 +1,4 @@
+max connections = 10
+log file = /var/log/rsync.log
+timeout = 300
+pid file = /var/run/rsyncd.pid

@@ -1,0 +1,36 @@
+#################################################
+#
+#	 Config parameters via Puppet		#
+#
+#################################################
+
+# Define the directories you want to retain...
+ELIGIBLE_TO_DEL_LOCAL=<%= @eligible_to_del_local %>
+
+# THESE WILL BE RSYNC LOCATIONS AS WELL !!
+LOCATIONS="<%= @locations_to_sync %>"
+
+# define the number of days for files to keep
+DAYS_TO_KEEP_LOCAL=<%= @days_to_keep_local %>
+
+# Define the location of the local log
+# "/var/log/retention-`date +%Y-%m-%d-%H%M`.log"
+LOG="<%= @log_path_formatted %>"
+
+# rsync destination [fqdn or IP]
+RSYNC_ADDR="<%= @rsync_address %>"
+
+# rsync options, DO NOT REMOVE THIS!
+RSYNC_OPTN="--ignore-existing --no-perms --no-owner --no-group -tuvz --timeout 5"
+
+# rsync user
+RSYNC_USER=rsbackup
+
+# defines the transfer set up on rsync server
+RSYNC_SCENARIO="<%= @rsync_profile_name %>"
+
+# Retry interval in seconds upon un-success transfer
+RSYNC_RETRY_INTERVAL=<%= @rsync_retry_interval %>
+
+# the times the retry happens
+RSYNC_MAX_RETRY=<%= @rsync_max_retry %>

@@ -1,0 +1,157 @@
+Node definition in '/etc/puppet/paypoint/manifests/nodes.pp'
+
+    node 'idmz1.paypoint.net' {
+          $node_type = "kvm"
+          $my_status = "prod"
+          $my_location  = "GS2"
+          $ip_addr_mgmt   = "172.30.50.211"
+          $ip_addr_app    = "172.30.16.211"
+          $type      = "kvmguest"
+          $whereami  = "lonapp1.paypoint.net"
+          $area = "50"
+
+          include logret
+          logret::glutenvrij { 'rms1_jbossas':
+                    eligible_to_del_local   => "6",
+                    locations_to_sync       => "/var/log/jbossas/standalone/servers/rms-server/",
+                    days_to_keep_local      => "5",
+                    log_path_formatted      => "/var/log/glutenvrij-run-`date +%F`-rms1_jbossas",
+                    rsync_address           => "172.30.50.68",
+                    rsync_profile_name      => "rms1_jbossas",
+                    rsync_retry_interval    => "30",
+                    rsync_max_retry         => "4",
+          }
+
+
+          logret::glutenvrij { 'tqs1_jbossas':
+                    eligible_to_del_local   => "6",
+                    locations_to_sync       => "/var/log/jbossas/standalone/servers/tqs-server/",
+                    days_to_keep_local      => "5",
+                    log_path_formatted      => "/var/log/glutenvrij-run-`date +%F`-tqs1_jbossas",
+                    rsync_address           => "172.30.50.68",
+                    rsync_profile_name      => "tqs1_jbossas",
+                    rsync_retry_interval    => "30",
+                    rsync_max_retry         => "4",
+          }
+
+    }
+
+NOTE: For each location, i.e. directory you have to create a new entry.
+Storage definition
+
+    node 'storage2.paypoint.net' {
+          $node_type = "kvm"
+          $my_status = "prod"
+          $my_location  = "GS2"
+          $ip_addr_50   = "172.30.50.68"
+          $ip_addr_51   = "172.30.51.68"
+          $type      = "storagelog"
+          $whereami  = "lbsan3"
+          $area = "50"
+          include role_storagelog
+          include storesync
+          class { 'storesync::config': }
+    }
+
+This module must be intact. Unless you want to use another node as a storage node. In this case you must add the following lines as mark in green.
+
+However you have to set up another file. This include in intended to invoke a config file which you indeed need to set. This file is located at /etc/puppet/modules/storesync/manifests/config.pp ..
+
+    class storesync::config{
+         storesync::glutenvrij { 'rms1_jbossas':
+         rsync_profile_name => "rms1_jbossas",
+         path => "/var/log/remote/ap-jbossas/idmz1/rms-server/",
+         hosts_allow => "172.30.50.211",
+    }
+
+     storesync::glutenvrij { 'tqs1_jbossas':
+         rsync_profile_name => "tqs1_jbossas",
+         path => "/var/log/remote/ap-jbossas/idmz1/tqs-server/",
+         hosts_allow => "172.30.50.211",
+    }
+
+Pitfalls/gotchas
+
+    make sure that the source address from the host is correct in the hosts_allow field otherwise you will get permission denied message from rsync.
+    on the storage server the directory you want to write has to be owned by the user initiates rsync (in our case rsbackup)
+    kick out puppet on storage node for the configs being generated
+    kick out puppet on node(s) for glutenvrij to be implemented and cron job being installed
+
+    if you accidently did start the retention script manually check the exit code in /usr/local/glutenvrij/functions
+    make sure the backup server and the node is on the same segment
+
+Add node monitoring to check_mk
+
+On the host itself after puppet was running edit the /etc/check_mk/mrpe.cfg file and add the following line to the bottom (or top, doesn't matter) to the file:
+
+    glutenvrij_status /usr/local/bin/check_glutenvrij
+
+Save the file and log in to monitor1 - 172.30.50.137.
+
+As root now you must re-inventory the host, for idmz2.paypoint.net for example you should issue the following commands in green.
+
+    OMD[blue]:~$ cmk -II idmz2.paypoint.net
+    check_mk.only_from 1 new checks
+    cpu.loads         1 new checks
+    cpu.threads       1 new checks
+    df                10 new checks
+    diskstat          1 new checks
+    fileinfo          3 new checks
+    kernel            3 new checks
+    kernel.util       1 new checks
+    lnx_if            2 new checks
+    logwatch          5 new checks
+    mem.used          1 new checks
+    mounts            10 new checks
+    mrpe              3 new checks
+    ntp.time          1 new checks
+    postfix_mailq     1 new checks
+    tcp_conn_stats    1 new checks
+    uptime            1 new checks
+    OMD[blue]:~$ cmk -R
+    Generating configuration for core (type nagios)...OK
+    Validating Nagios configuration...OK
+    Precompiling host checks...OK
+    Restarting monitoring core...OK
+
+After this step you should be able to see the new check in check_mk under the host.
+
+ 
+2016/01/13 15:08:44 [17041] rsync: chroot /var/log/remote/bureau/ww1/engine failed: Permission denied (13)
+2016/01/13 15:09:15 [17135] name lookup failed for 172.30.51.22: Name or service not known
+type errors on the storage node in the rsync logs
+
+If you run in to these errors it is most probably because SELinux is enabled and the process doesn't have right to write the backup location. Check it!
+
+    [root@storage1 ~]# getenforce
+    Enforcing
+
+ In this case go to Stash and locate the project page under Infrastructure / log-retention or just click here. Go to the selinux library and save the .te [this is the SELinux module] file first then the .sh [this is the installer I wrote] file.
+Invoke the SH file on the storage node in the following format:
+
+    [root@storage1 ~]# ./dep.sh pp_rsync_backup_policy.te
+    All good [id=0], proceed to comipiling the SELinux module..
+    Compiling targeted pp_rsync_backup_policy module
+    /usr/bin/checkmodule:  loading policy configuration from tmp/pp_rsync_backup_policy.tmp
+    /usr/bin/checkmodule:  policy configuration loaded
+    /usr/bin/checkmodule:  writing binary representation (version 10) to tmp/pp_rsync_backup_policy.mod
+    Creating targeted pp_rsync_backup_policy.pp policy package
+    rm tmp/pp_rsync_backup_policy.mod tmp/pp_rsync_backup_policy.mod.fc
+    Installed module:
+    pp_rsync_backup_module_policy  1.2
+
+If this is what you see then now you can re-transmit your files. This should resolve the issue.
+Invalid config files in /etc/glutenvrij
+
+If you see an output similar to this:
+
+    Some checks of config file passed ..
+    find: `/var/log/jbossas/standalone/servers/css-server': No such file or directory
+    find: `/var/log/jbossas/standalone/servers/css-server': No such file or directory
+    find: `/var/log/jbossas/standalone/servers/css-server': No such file or directory
+    find: `/var/log/jbossas/standalone/servers/css-server': No such file or directory
+    find: `/var/log/jbossas/standalone/servers/css-server': No such file or directory
+    find: `/var/log/jbossas/standalone/servers/css-server': No such file or directory
+    Cleanup complete!
+
+If you previously made a mistake in the node definition and puppet was running the invalid config file remains in place. You must remove this file in order to not to get this error.
